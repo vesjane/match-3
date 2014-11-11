@@ -11,20 +11,37 @@
 		// constants
 		static const numPieces:uint = 7;
 		static const spacing:Number = 48;
-		static const offsetX:Number = 120;
-		static const offsetY:Number = 30;
-		static const deltaSpacing:Number = 8;
+		static const offsetX:Number = 90;
+		static const offsetY:Number = 170;
+		static const deltaSpacing:Number = 6;
 		
 		// game grid and mode
 		private var grid:Array;
 		private var gameSprite:Sprite;
 		private var firstPiece:Piece;
 		private var isDropping,isSwapping:Boolean;
-		private var gameScore:int;
+		private var gameScore:int;		
+		//
+		public var gameTime:int;
+		public var levelDuration:int = 3;
+		private var gameTimer:Timer;
+		private var isFirstClick:Boolean;
 		
 		// set up grid and start game
 		public function startMatchThree() {
 			// create grid array
+			init();
+			isFirstClick = false;
+			gameScore = 0;
+			gameTime = levelDuration;
+			gameTimer = new Timer(1000,levelDuration);
+			gameTimer.addEventListener(TimerEvent.TIMER, updateTime);
+			gameTimer.addEventListener(TimerEvent.TIMER_COMPLETE, timeExpired);
+			MovieClip(root).timerText.text = String(gameTime);
+			
+		}
+		private function init():void
+		{
 			grid = new Array();
 			for(var gridrows:int=0;gridrows<8;gridrows++) {
 				grid.push(new Array());
@@ -32,8 +49,25 @@
 			setUpGrid();
 			isDropping = false;
 			isSwapping = false;
-			gameScore = 0;
 			addEventListener(Event.ENTER_FRAME,movePieces);
+		}
+		
+		function updateTime(e:TimerEvent):void
+		{
+			// your class variable tracking each second, 
+			gameTime--;
+			MovieClip(root).timerText.text = String(gameTime);
+		
+		}
+		
+		function timeExpired(e:TimerEvent):void
+		{
+			var gameTimer:Timer = e.target as Timer;
+			gameTimer.removeEventListener(TimerEvent.TIMER, updateTime);
+			gameTimer.removeEventListener(TimerEvent.TIMER, timeExpired);
+			endGame();
+		
+			// do whatever you need to do for game over
 		}
 	public function setUpGrid() {
 			// loop until valid starting grid
@@ -110,7 +144,13 @@
 				} else {
 					firstPiece = piece;
 					firstPiece.select.visible = true;
+					
 				}
+			}
+			if(!isFirstClick)
+			{
+				isFirstClick = true;
+				gameTimer.start();
 			}
 		}
 
@@ -120,7 +160,8 @@
 			
 			// check to see if move was fruitful
 			if (lookForMatches().length == 0) {
-				swapPieces(piece1,piece2);
+				
+				swapPieces(piece1,piece2);				
 			} else {
 				isSwapping = true;
 			}
@@ -144,12 +185,14 @@
 
 		// if any pieces are out of place, move them a step closer to being in place
 		// happens when pieces are swapped, or they are dropping
-		public function movePieces(event:Event) {
+		
+		public function moveAnimation():Boolean
+		{
 			var madeMove:Boolean = false;
 			for(var row:int=0;row<8;row++) {
 				for(var col:int=0;col<8;col++) {
-					if (grid[col][row] != null) {
-						
+					if (grid[col][row] != null) {		
+					grid[col][row].visible = false;
 						// needs to move down
 						if (grid[col][row].y < grid[col][row].row*spacing+offsetY) {
 							grid[col][row].y += deltaSpacing;
@@ -170,9 +213,19 @@
 							grid[col][row].x -= deltaSpacing;
 							madeMove = true;
 						}
+						if (grid[col][row].y >= offsetY-spacing/2)
+							{
+								grid[col][row].visible = true;
+							}
 					}
 				}
 			}
+			
+			return madeMove;
+			
+		}
+		public function movePieces(event:Event) {
+			var madeMove:Boolean = moveAnimation();
 			
 			// if all dropping is done
 			if (isDropping && !madeMove) {
@@ -195,7 +248,7 @@
 				var numPoints:Number = (matches[i].length-1)*50;
 				for(var j:int=0;j<matches[i].length;j++) {
 					if (gameSprite.contains(matches[i][j])) {
-						var pb = new PointBurst(this,numPoints,matches[i][j].x,matches[i][j].y);
+						var pb = new PointBurst(this,numPoints,matches[i][j].x,matches[i][j].y);						
 						addScore(numPoints);
 						gameSprite.removeChild(matches[i][j]);
 						grid[matches[i][j].col][matches[i][j].row] = null;
@@ -209,8 +262,9 @@
 			
 			// no matches found, maybe the game is over?
 			if (matches.length == 0) {
-				if (!lookForPossibles()) {
-					endGame();
+				if (!lookForPossibles()) {					
+					cleanUp();
+					init();
 				}
 			}
 		}
@@ -288,7 +342,8 @@
 				for(var row:int=7;row>=0;row--) {
 					if (grid[col][row] == null) {
 						var newPiece:Piece = addPiece(col,row);
-						newPiece.y = offsetY-spacing-spacing*missingPieces++;
+						newPiece.visible = false;
+						newPiece.y = offsetY-spacing-spacing*missingPieces++;						
 						isDropping = true;
 					}
 				}
@@ -353,14 +408,17 @@
 		
 		public function addScore(numPoints:int) {
 			gameScore += numPoints;
-			//MovieClip(root).scoreDisplay.text = String(gameScore);
+			MovieClip(root).scoreText.text = String(gameScore);
 		}
 		
-		public function endGame() {
-			// move to back
-			setChildIndex(gameSprite,0);
-			// go to end game
+		public function endGame() {					
+			
+			setChildIndex(gameSprite,0);			
 			gotoAndStop("gameover");
+		}
+		public function showResults()
+		{
+			MovieClip(root).resultPoints.text = String(gameScore);
 		}
 		
 		public function cleanUp() {
@@ -369,5 +427,8 @@
 			gameSprite = null;
 			removeEventListener(Event.ENTER_FRAME,movePieces);
 		}
+
 	}
+	
+
 }
