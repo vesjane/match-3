@@ -5,31 +5,47 @@
 	import flash.events.*;
 	import flash.text.*;
 	import flash.utils.Timer;
+	import com.FlippingBook.Page.IPage;
+	import com.FlippingBook.Page.PageProxy;
+	import flash.filters.GlowFilter;
 	
-	public class MatchTree extends MovieClip {
+	public class MatchTree extends MovieClip implements IPage {
 		
-		// constants
+		
 		static const numPieces:uint = 7;
 		static const spacing:Number = 48;
 		static const offsetX:Number = 90;
 		static const offsetY:Number = 170;
-		static const deltaSpacing:Number = 6;
+		static const deltaSpacing:Number = 8;
 		
-		// game grid and mode
 		private var grid:Array;
 		private var gameSprite:Sprite;
 		private var firstPiece:Piece;
 		private var isDropping,isSwapping:Boolean;
 		private var gameScore:int;		
-		//
+		
 		public var gameTime:int;
-		public var levelDuration:int = 3;
+		public var levelDuration:int = 20;
 		private var gameTimer:Timer;
 		private var isFirstClick:Boolean;
+		private var isPause:Boolean = false;
 		
-		// set up grid and start game
-		public function startMatchThree() {
-			// create grid array
+		private var bookProxy:PageProxy;		
+		
+		public function setBookPage(bookPage:*):void
+		{
+			bookProxy =  new PageProxy(bookPage);
+			bookProxy.addEventListener(PageProxy.PAGE_CLOSE_EVENT,onPageClose);
+		}
+		
+		private function onPageClose(e:Event):void
+		{			
+			
+			
+		}
+		
+		
+		public function startMatchThree() {					
 			init();
 			isFirstClick = false;
 			gameScore = 0;
@@ -39,6 +55,17 @@
 			gameTimer.addEventListener(TimerEvent.TIMER_COMPLETE, timeExpired);
 			MovieClip(root).timerText.text = String(gameTime);
 			
+		}
+		
+		private function updateGemeTimer(newValue:Number)
+		{
+			gameTimer.removeEventListener(TimerEvent.TIMER, updateTime);
+			gameTimer.removeEventListener(TimerEvent.TIMER, timeExpired);
+			gameTimer.stop();
+			gameTimer = new Timer(1000,newValue);
+			gameTimer.addEventListener(TimerEvent.TIMER, updateTime);
+			gameTimer.addEventListener(TimerEvent.TIMER_COMPLETE, timeExpired);
+			gameTimer.start();
 		}
 		private function init():void
 		{
@@ -53,8 +80,7 @@
 		}
 		
 		function updateTime(e:TimerEvent):void
-		{
-			// your class variable tracking each second, 
+		{			
 			gameTime--;
 			MovieClip(root).timerText.text = String(gameTime);
 		
@@ -65,42 +91,46 @@
 			var gameTimer:Timer = e.target as Timer;
 			gameTimer.removeEventListener(TimerEvent.TIMER, updateTime);
 			gameTimer.removeEventListener(TimerEvent.TIMER, timeExpired);
-			endGame();
-		
-			// do whatever you need to do for game over
+			endGame();			
 		}
-	public function setUpGrid() {
-			// loop until valid starting grid
-			while (true) {
-				// create sprite
-				gameSprite = new Sprite();
-				
-				// add 64 random pieces
-				for(var col:int=0;col<8;col++) {
-					for(var row:int=0;row<8;row++) {
-						addPiece(col,row);
+		
+		public function initNewPieces() {
+			for(var i:int=0;i<8;i++) {
+					for(var j:int=0;j<8;j++) {
+						grid[i][j] = null;
+					}
+			}
+			for(var col:int=0;col<8;col++) {
+				var missingPieces:int = 0;
+				for(var row:int=7;row>=0;row--) {
+					if (grid[col][row] == null) {
+						var newPiece:Piece = addPiece(col,row);
+						newPiece.visible = false;
+						newPiece.y = offsetY-spacing-spacing*missingPieces++;						
+						isDropping = true;
 					}
 				}
-				
-				// try again if matches are present
-				if (lookForMatches().length != 0) continue;
-				
-				// try again if no possible moves
-				if (lookForPossibles() == false) continue;
-				
-				// no matches, but possibles exist: good board found
-				break;
-			} 
-			
-			// add sprite
-			addChild(gameSprite);
+			}
 		}
 		
-		// create a random piece, add to sprite and grid
+	public function setUpGrid() {			
+			while (true) {				
+				gameSprite = new Sprite();				
+				initNewPieces();
+				isPause = false;				
+				
+				if (lookForMatches().length != 0) continue;					
+				if (lookForPossibles() == false) continue;				
+				break;
+			} 			
+			
+			addChild(gameSprite);
+		}		
+		
 		public function addPiece(col,row:int):Piece {
 			var newPiece:Piece = new Piece();
 			newPiece.x = col*spacing+offsetX;
-			newPiece.y = row*spacing+offsetY;
+			newPiece.y = row*spacing+offsetY;			
 			newPiece.col = col;
 			newPiece.row = row;
 			newPiece.type = Math.ceil(Math.random()*7);
@@ -112,38 +142,34 @@
 			return newPiece;
 		}
 		
-		// player clicks on a piece
+		
 		public function clickPiece(event:MouseEvent) {
 			var piece:Piece = Piece(event.currentTarget);
 			
-			// first one selected
+			
 			if (firstPiece == null) {
 				piece.select.visible = true;
-				firstPiece = piece;
-				
-			// clicked on first piece again
+				firstPiece = piece;			
+			
 			} else if (firstPiece == piece) {
 				piece.select.visible = false;
-				firstPiece = null;
+				firstPiece = null;				
 			
-			// clicked on second piece
+			
 			} else {
-				firstPiece.select.visible = false;
+				firstPiece.select.visible = false;				
 				
-				// same row, one column over
 				if ((firstPiece.row == piece.row) && (Math.abs(firstPiece.col-piece.col) == 1)) {
 					makeSwap(firstPiece,piece);
-					firstPiece = null;
-					
-				// same column, one row over
+					firstPiece = null;					
+				
 				} else if ((firstPiece.col == piece.col) && (Math.abs(firstPiece.row-piece.row) == 1)) {
 					makeSwap(firstPiece,piece);
-					firstPiece = null;
-					
-				// bad move, reassign first piece
+					firstPiece = null;					
+				
 				} else {
 					firstPiece = piece;
-					firstPiece.select.visible = true;
+					firstPiece.select.visible = true;		
 					
 				}
 			}
@@ -151,40 +177,45 @@
 			{
 				isFirstClick = true;
 				gameTimer.start();
+				MovieClip(root).stopBtn.visible = true;
+				MovieClip(root).playBtn.visible = false;
+				isPause = false;
 			}
 		}
 
-		// start animated swap of two pieces
+		public function setGamePause():void
+		{
+			gameTimer.stop();
+			isPause = true;
+		}
+		
+		public function gamePauseReset():void
+		{
+			gameTimer.start();
+			isPause = false;
+		}
+		
 		public function makeSwap(piece1,piece2:Piece) {
-			swapPieces(piece1,piece2);
-			
-			// check to see if move was fruitful
-			if (lookForMatches().length == 0) {
-				
+			swapPieces(piece1,piece2);			
+			if (lookForMatches().length == 0) {				
 				swapPieces(piece1,piece2);				
 			} else {
 				isSwapping = true;
 			}
-		}
+		}		
 		
-		// swap two pieces
-		public function swapPieces(piece1,piece2:Piece) {
-			// swap row and col values
+		public function swapPieces(piece1,piece2:Piece) {			
 			var tempCol:uint = piece1.col;
 			var tempRow:uint = piece1.row;
 			piece1.col = piece2.col;
 			piece1.row = piece2.row;
 			piece2.col = tempCol;
-			piece2.row = tempRow;
+			piece2.row = tempRow;			
 			
-			// swap grid positions
 			grid[piece1.col][piece1.row] = piece1;
 			grid[piece2.col][piece2.row] = piece2;
 			
-		}
-
-		// if any pieces are out of place, move them a step closer to being in place
-		// happens when pieces are swapped, or they are dropping
+		}		
 		
 		public function moveAnimation():Boolean
 		{
@@ -225,20 +256,27 @@
 			
 		}
 		public function movePieces(event:Event) {
-			var madeMove:Boolean = moveAnimation();
-			
-			// if all dropping is done
-			if (isDropping && !madeMove) {
-				isDropping = false;
-				findAndRemoveMatches();
-				
-			// if all swapping is done
-			} else if (isSwapping && !madeMove) {
-				isSwapping = false;
-				findAndRemoveMatches();
+			if(!isPause)
+			{
+				var madeMove:Boolean = moveAnimation();			
+				// if all dropping is done
+				if (isDropping && !madeMove) {
+					isDropping = false;
+					findAndRemoveMatches();
+					
+				// if all swapping is done
+				} else if (isSwapping && !madeMove) {
+					isSwapping = false;
+					findAndRemoveMatches();
+				}
 			}
+			
 		}
 				
+		function removePieceAnimation():void
+		{
+			
+		}
 		
 		// gets matches and removes them, applies points
 		public function findAndRemoveMatches() {
@@ -253,14 +291,20 @@
 						gameSprite.removeChild(matches[i][j]);
 						grid[matches[i][j].col][matches[i][j].row] = null;
 						affectAbove(matches[i][j]);
+						
 					}
 				}
+				if(matches[i].length >3)
+						{
+							gameTime+=15;		
+							updateGemeTimer(gameTime);		
+							var timeAdd = new PointBurst(this,"+15",MovieClip(root).timerText.x-15,MovieClip(root).timerText.y);
+							MovieClip(root).timerText.text = String(gameTime);
+						}
 			}
 			
-			// add any new piece to top of board
-			addNewPieces();
+			addNewPieces();			
 			
-			// no matches found, maybe the game is over?
 			if (matches.length == 0) {
 				if (!lookForPossibles()) {					
 					cleanUp();
@@ -269,7 +313,7 @@
 			}
 		}
 		
-		//return an array of all matches found
+		
 		public function lookForMatches():Array {
 			var matchList:Array = new Array();
 			
@@ -296,9 +340,8 @@
 				}
 			}
 			return matchList;
-		}
+		}		
 		
-		// look for horizontal matches starting at this point
 		public function getMatchHoriz(col,row):Array {
 			var match:Array = new Array(grid[col][row]);
 			for(var i:int=1;col+i<8;i++) {
@@ -310,8 +353,7 @@
 			}
 			return match;
 		}
-
-		// look for vertical matches starting at this point
+		
 		public function getMatchVert(col,row):Array {
 			var match:Array = new Array(grid[col][row]);
 			for(var i:int=1;row+i<8;i++) {
@@ -322,9 +364,8 @@
 				}
 			}
 			return match;
-		}
+		}		
 		
-		// tell all pieces above this one to move down
 		public function affectAbove(piece:Piece) {
 			for(var row:int=piece.row-1;row>=0;row--) {
 				if (grid[piece.col][row] != null) {
@@ -333,9 +374,8 @@
 					grid[piece.col][row] = null;
 				}
 			}
-		}
+		}		
 		
-		// if there are missing pieces in a column, add one to drop
 		public function addNewPieces() {
 			for(var col:int=0;col<8;col++) {
 				var missingPieces:int = 0;
@@ -350,7 +390,7 @@
 			}
 		}
 		
-		// look to see if a possible move is on the board
+		
 		public function lookForPossibles() {
 			for(var col:int=0;col<8;col++) {
 				for(var  row:int=0;row<8;row++) {
@@ -375,23 +415,20 @@
 						return true;
 					}
 				}
-			}
+			}			
 			
-			// no possible moves found
 			return false;
 		}
 		
 		public function matchPattern(col,row:uint, mustHave, needOne:Array) {
-			var thisType:int = grid[col][row].type;
+			var thisType:int = grid[col][row].type;			
 			
-			// make sure this has all must-haves
 			for(var i:int=0;i<mustHave.length;i++) {
 				if (!matchType(col+mustHave[i][0], row+mustHave[i][1], thisType)) {
 					return false;
 				}
-			}
+			}			
 			
-			// make sure it has at least one need-ones
 			for(i=0;i<needOne.length;i++) {
 				if (matchType(col+needOne[i][0], row+needOne[i][1], thisType)) {
 					return true;
@@ -400,8 +437,7 @@
 			return false;
 		}
 		
-		public function matchType(col,row,type:int) {
-			// make sure col and row aren't beyond the limit
+		public function matchType(col,row,type:int) {			
 			if ((col < 0) || (col > 7) || (row < 0) || (row > 7)) return false;
 			return (grid[col][row].type == type);
 		}
@@ -418,7 +454,7 @@
 		}
 		public function showResults()
 		{
-			MovieClip(root).resultPoints.text = String(gameScore);
+			MovieClip(root).endGameWindow.snowBall.scoreText.text = String(gameScore);
 		}
 		
 		public function cleanUp() {
